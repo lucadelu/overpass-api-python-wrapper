@@ -58,6 +58,27 @@ class API(object):
         # construct geojson
         return self._asGeoJSON(response["elements"])
 
+    def Write(self, query, output, asGeoJSON=False):
+        """Execute your query and save it in a file"""
+        response = ""
+
+        try:
+            response = self._GetFromOverpass(self._ConstructQLQuery(query, asGeoJSON=asGeoJSON))
+        except OverpassException as oe:
+            print oe
+            sys.exit(1)
+
+        with open(output, 'w') as f:
+            if self.responseformat == 'json' or asGeoJSON:
+                response = json.loads(response)
+                if asGeoJSON:
+                    response = self._asGeoJSON(response["elements"])
+                json.dump(response, f, indent=4)
+            else:
+                f.write(response.encode('utf8'))
+            f.close()
+        return
+
     def Search(self, feature_type, regex=False):
         """Search for something."""
         pass
