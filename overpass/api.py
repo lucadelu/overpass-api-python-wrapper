@@ -1,7 +1,7 @@
 import sys
 import requests
 import json
-from shapely.geometry import mapping, Point
+import geojson
 
 
 class API(object):
@@ -15,6 +15,7 @@ class API(object):
     _bbox = [-180.0, -90.0, 180.0, 90.0]
 
     _QUERY_TEMPLATE = "[out:{responseformat}];{query}out body;"
+    _GEOJSON_QUERY_TEMPLATE = "[out:json];{query}out body geom;"
 
     def __init__(self, *args, **kwargs):
         self.endpoint = kwargs.get("endpoint", self._endpoint)
@@ -42,7 +43,7 @@ class API(object):
 
         try:
             response = json.loads(self._GetFromOverpass(
-                self._ConstructQLQuery(query)))
+                self._ConstructQLQuery(query, asGeoJSON=asGeoJSON)))
         except OverpassException as oe:
             print oe
             sys.exit(1)
@@ -60,12 +61,19 @@ class API(object):
         """Search for something."""
         pass
 
-    def _ConstructQLQuery(self, userquery):
+    def _ConstructQLQuery(self, userquery, asGeoJSON=False):
         raw_query = str(userquery)
         if not raw_query.endswith(";"):
             raw_query += ";"
 
-        complete_query = self._QUERY_TEMPLATE.format(responseformat=self.responseformat, query=raw_query)
+        if asGeoJSON:
+            template = self._GEOJSON_QUERY_TEMPLATE
+        else:
+            template = self._QUERY_TEMPLATE
+
+        complete_query = template.format(responseformat=self.responseformat,
+                                         query=raw_query)
+
         if self.debug:
             print complete_query
         return complete_query
@@ -77,9 +85,10 @@ class API(object):
         payload = {"data": query}
 
         try:
-            r = requests.get(self.endpoint, params=payload, timeout=self.timeout)
+            r = requests.get(self.endpoint, params=payload,
+                             timeout=self.timeout)
         except requests.exceptions.Timeout:
-            raise OverpassException(408, 
+            raise OverpassException(408,
                 'Query timed out. API instance is set to time out in {timeout} seconds. '
                 'Try passing in a higher value when instantiating this API:'
                 'api = Overpass.API(timeout=60)'.format(timeout=self.timeout))
@@ -96,23 +105,34 @@ class API(object):
             return r.text
 
     def _asGeoJSON(self, elements):
-        """construct geoJSON from elements"""
-        nodes = [{
-            "id": elem.get("id"),
-            "tags": elem.get("tags"),
-            "geom": Point(elem["lon"], elem["lat"])}
-            for elem in elements if elem["type"] == "node"]
-        ways = [{
-            "id": elem.get("id"),
-            "tags": elem.get("tags"),
-            "nodes": elem.get("nodes")}
-            for elem in elements if elem["type"] == "way"]
-        print nodes
-        print ways
+        #print 'DEB _asGeoJson elements:', elements
+
+        features = []
+        for elem in elements:
+            elem_type = elem["type"]
+            if elem["type"] == "node":
+                geometry=geojson.Point((elem["lon"], elem["lat"]))
+            elif elem["type"] == "way":
+                points = []
+                for coords in elem["geometry"]:
+                    points.append((coords["lon"], coords["lat"]))
+                geometry = geojson.LineString(points)
+            else:
+                continue
+
+            feature = geojson.Feature(id=elem["id"], geometry=geometry,
+                                      properties=elem.get("tags"))
+            features.append(feature)
+
+        return geojson.FeatureCollection(features)
+
 
 class OverpassException(Exception):
+
     def __init__(self, status_code, message):
         self.status_code = status_code
         self.message = message
+
     def __str__(self):
-        return json.dumps({'status': self.status_code, 'message': self.message})
+        return json.dumps({'status': self.status_code,
+                           'message': self.message})
