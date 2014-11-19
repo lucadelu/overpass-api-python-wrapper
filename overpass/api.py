@@ -12,10 +12,10 @@ class API(object):
     _endpoint = "http://overpass-api.de/api/interpreter"
     _responseformat = "json"
     _debug = False
-    _bbox = [-180.0, -90.0, 180.0, 90.0]
+    _bbox = False
 
-    _QUERY_TEMPLATE = "[out:{responseformat}];{query}out body;"
-    _GEOJSON_QUERY_TEMPLATE = "[out:json];{query}out body geom;"
+    _QUERY_TEMPLATE = "[out:{responseformat}][timeout:{timeo}]{search};{query}out body;"
+    _GEOJSON_QUERY_TEMPLATE = "[out:json][timeout:{timeo}]{search};{query}out body geom;"
 
     def __init__(self, *args, **kwargs):
         self.endpoint = kwargs.get("endpoint", self._endpoint)
@@ -23,6 +23,7 @@ class API(object):
         self.responseformat = kwargs.get("responseformat", self._responseformat)
         self.debug = kwargs.get("debug", self._debug)
         self.bbox = kwargs.get("bbox", self._bbox)
+        self.filterarea = False
         self._status = None
 
         if self.debug:
@@ -61,7 +62,31 @@ class API(object):
         """Search for something."""
         pass
 
+    def FilterArea(self, area, bbox=False):
+        """Add a filter to the query using an area. It use nominatim to
+           obtain the right value
+        """
+        from nominatim import Nominatim
+        nom = Nominatim()
+        resp = nom.query(area)
+        if len(resp) == 0:
+             raise OverpassException(204, 'No OSM features satisfied your query')
+        else:
+            for r in resp:
+                if r['osm_type'] == 'relation':
+                    if bbox:
+                        BB = [float(r['boundingbox'][0]), float(r['boundingbox'][3]),
+                              float(r['boundingbox'][1]), float(r['boundingbox'][2])]
+                        self.bbox = BB
+                        return
+                    else:
+                        idd = int(r['osm_id']) + 3600000000
+                        self.filterarea = ";area({id})->.searchArea".format(id=idd)
+                        return
+        raise OverpassException(204, 'No OSM features satisfied your query')
+
     def _ConstructQLQuery(self, userquery, asGeoJSON=False):
+
         raw_query = str(userquery)
         if not raw_query.endswith(";"):
             raw_query += ";"
@@ -71,7 +96,16 @@ class API(object):
         else:
             template = self._QUERY_TEMPLATE
 
+        if self.bbox:
+            self.filterarea = ''
+        elif self.filterarea:
+            self.bbox = '(area.searchArea);'
+
+        raw_query = raw_query.format(area=self.bbox)
+
         complete_query = template.format(responseformat=self.responseformat,
+                                         timeo=self.timeout,
+                                         search=self.filterarea,
                                          query=raw_query)
 
         if self.debug:

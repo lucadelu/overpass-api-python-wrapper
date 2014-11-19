@@ -28,7 +28,7 @@ class NodeQuery(object):
     """Query to retrieve a set of nodes and their dependent nodes satisfying
        the input parameters"""
 
-    _QUERY_TEMPLATE = "(node{query_parameters});(._;>;);"
+    _QUERY_TEMPLATE = "(node{query_parameters}{{area}});(._;>;);"
 
     def __init__(self, query_parameters):
         """
@@ -46,7 +46,7 @@ class WayQuery(object):
     """Query to retrieve a set of ways and their dependent nodes satisfying
        the input parameters"""
 
-    _QUERY_TEMPLATE = "(way{query_parameters});(._;>;);"
+    _QUERY_TEMPLATE = "(way{query_parameters}{{area}});(._;>;);"
 
     def __init__(self, query_parameters):
         """
@@ -64,7 +64,7 @@ class RelQuery(object):
     """Query to retrieve a set of relation and their dependent ways and/or
        nodes satisfying the input parameters"""
 
-    _QUERY_TEMPLATE = "(relation{query_parameters});(._;>;);"
+    _QUERY_TEMPLATE = "(relation{query_parameters}{{area}});(._;>;);"
 
     def __init__(self, query_parameters):
         """
